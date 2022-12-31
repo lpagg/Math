@@ -1,4 +1,3 @@
-﻿
 <!DOCTYPE HTML>
 <html lang="en">
 <head>
@@ -7,12 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <style type="text/css">
-body { margin: 0; padding: 0; background: #000;}
+body { margin: 0; padding: 0; background: #333;}
 canvas { display: block; margin: 0 auto; background: #fff; }
 </style>
 </head>
-<body>
-<canvas></canvas>
+<body onload="_init()">
+<canvas id="myCanvas"></canvas>
 <script>
 
 var AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -54,12 +53,9 @@ webAudioTouchUnlock(actx).then(function (unlocked)
 {
     if(unlocked)
     {
-        // AudioContext was unlocked from an explicit user action,
-        // sound should start playing now
     }
     else
     {
-        // There was no need for unlocking, devices other than iOS
     }
 },
 function(reason)
@@ -86,8 +82,6 @@ create a laser shooting sound:
       false,            //reverse bend
       0,                //random pitch range
       25,               //dissonance
-      [0.2, 0.2, 2000], //echo: [delay, feedback, filter]
-      undefined         //reverb: [duration, decay, reverse?]
       3                 //Maximum duration of sound, in seconds
     );
 Experiment by changing these parameters to see what kinds of effects you can create, and build
@@ -106,8 +100,6 @@ function SoundEffect(
   reverse,             //If `reverse` is true the pitch will bend up
   randomValue,         //A range, in Hz, within which to randomize the pitch
   dissonance,          //A value in Hz. It creates 2 dissonant frequencies above and below the target pitch
-  echo,                //An array: [delayTimeInSeconds, feedbackTimeInSeconds, filterValueInHz]
-  reverb,              //An array: [durationInSeconds, decayRateInSeconds, reverse]
   timeout              //A number, in seconds, which is the maximum duration for sound effects
 ) {
 
@@ -123,8 +115,6 @@ function SoundEffect(
   if (reverse === undefined) reverse = false;
   if (randomValue === undefined) randomValue = 0;
   if (dissonance === undefined) dissonance = 0;
-  if (echo === undefined) echo = undefined;
-  if (reverb === undefined) reverb = undefined;
   if (timeout === undefined) timeout = undefined;
 
   //Create an oscillator, gain and pan nodes, and connect them
@@ -172,8 +162,6 @@ function SoundEffect(
   if (attack > 0) fadeIn(volume);
   fadeOut(volume);
   if (pitchBendAmount > 0) pitchBend(oscillator);
-  if (echo) addEcho(volume);
-  if (reverb) addReverb(volume);
   if (dissonance > 0) addDissonance();
 
   //Play the sound
@@ -186,38 +174,6 @@ function SoundEffect(
     convolver.buffer = impulseResponse(reverb[0], reverb[1], reverb[2], actx);
     volumeNode.connect(convolver);
     convolver.connect(pan);
-  }
-
-  function addEcho(volumeNode) {
-
-    //Create the nodes
-    var feedback = actx.createGain(),
-        delay = actx.createDelay(),
-        filter = actx.createBiquadFilter();
-
-    //Set their values (delay time, feedback time and filter frequency)
-    delay.delayTime.value = echo[0];
-    feedback.gain.value = echo[1];
-    if (echo[2]) filter.frequency.value = echo[2];
-
-    //Create the delay feedback loop, with
-    //optional filtering
-    delay.connect(feedback);
-    if (echo[2]) {
-      feedback.connect(filter);
-      filter.connect(delay);
-    } else {
-      feedback.connect(delay);
-    }
-
-    //Connect the delay loop to the oscillator's volume
-    //node, and then to the destination
-    volumeNode.connect(delay);
-
-    //Connect the delay loop to the main sound chain's
-    //pan node, so that the echo effect is directed to
-    //the correct speaker
-    delay.connect(pan);
   }
 
   //The `fadeIn` function
@@ -322,14 +278,6 @@ function SoundEffect(
       pitchBend(d1);
       pitchBend(d2);
     }
-    if (echo) {
-      addEcho(d1Volume);
-      addEcho(d2Volume);
-    }
-    if (reverb) {
-      addReverb(d1Volume);
-      addReverb(d2Volume);
-    }
     play(d1);
     play(d2);
   }
@@ -348,76 +296,26 @@ function SoundEffect(
 }
 
 /*
-impulseResponse
----------------
-The `makeSound` and `SoundEffect` functions uses `impulseResponse`  to help create an optional reverb effect.  
-It simulates a model of sound reverberation in an acoustic space which 
-a convolver node can blend with the source sound. Make sure to include this function along with `makeSound`
-and `SoundEffect` if you need to use the reverb feature.
-*/
-
-function impulseResponse(duration, decay, reverse, actx) {
-
-  //The length of the buffer.
-  var length = actx.sampleRate * duration;
-
-  //Create an audio buffer (an empty sound container) to store the reverb effect.
-  var impulse = actx.createBuffer(2, length, actx.sampleRate);
-
-  //Use `getChannelData` to initialize empty arrays to store sound data for
-  //the left and right channels.
-  var left = impulse.getChannelData(0),
-      right = impulse.getChannelData(1);
-
-  //Loop through each sample-frame and fill the channel
-  //data with random noise.
-  for (var i = 0; i < length; i++){
-
-    //Apply the reverse effect, if `reverse` is `true`.
-    var n;
-    if (reverse) {
-      n = length - i;
-    } else {
-      n = i;
-    }
-
-    //Fill the left and right channels with random white noise which
-    //decays exponentially.
-    left[i] = (Math.random() * 2 - 1) * Math.pow(1 - n / length, decay);
-    right[i] = (Math.random() * 2 - 1) * Math.pow(1 - n / length, decay);
-  }
-
-  //Return the `impulse`.
-  return impulse;
-}
-
-/*
 API
-
+WIDTH
+HEIGHT
 LOOP
 update();
 render();
-
 DRAW
 Rect(left, top, width, height, color);
 Circle(left, top, radius, color);
 Text(text, left, top, size, color);
 Line(xi, yi, xf, yf, width, col);
-WIDTH
-HEIGHT
-
 INTERACTION
 TAPPED
 TAPX
 TAPY
-
 SOUND
-SoundEffect(frequencyValue, attack, decay, type, volumeValue, panValue, wait, pitchBendAmount, reverse, randomValue, dissonance,  echo,    reverb, timeout);
-
+SoundEffect(frequencyValue, attack, decay, type, volumeValue, panValue, wait, pitchBendAmount, reverse, randomValue, dissonance,timeout);
 UTILS
 Random(min, max);
 PitchToFrequency(octave, semitone);
-
 */
 
 var	WIDTH = 320, 
@@ -432,7 +330,6 @@ var	WIDTH = 320,
     _ua = null,
     _android = null,
     _ios = null,
-    _actx = new AudioContext(),
     _now = null,
     _dt = 0,
     _last = window.performance.now(),
@@ -445,7 +342,7 @@ function _init() {
   _RATIO = WIDTH / HEIGHT;
   _currentWidth = WIDTH;
   _currentHeight = HEIGHT;
-  _canvas = document.getElementsByTagName('canvas')[0];
+  _canvas = document.getElementById('myCanvas');
   _canvas.width = WIDTH;
   _canvas.height = HEIGHT;
   _ctx = _canvas.getContext('2d');
@@ -471,6 +368,7 @@ function _init() {
 };
 
 function _resize() {
+  _canvas = document.getElementById('myCanvas');
   _currentHeight = window.innerHeight;
   _currentWidth = _currentHeight * _RATIO;
   if (_android || _ios) {
@@ -535,22 +433,6 @@ function Line(xi, yi, xf, yf, width, col) {
   _ctx.stroke(); 
 };
 
-function Play(type,duration,wait,semitone,octave) {
-  var o,g;
-  o = parent._actx.createOscillator();
-  g = parent._actx.createGain();
-  o.connect(g);
-  g.connect(parent._actx.destination);
-  o.frequency.value = 440 * Math.pow( 2, (octave-4)+(semitone-9)/12 );
-  o.type=type;
-  g.gain.value = 0;
-  g.gain.linearRampToValueAtTime( 0, parent._actx.currentTime + wait);
-  g.gain.linearRampToValueAtTime( 0.5, parent._actx.currentTime + wait + duration/2);
-  g.gain.linearRampToValueAtTime( 0, parent._actx.currentTime + wait + duration);
-  o.start(parent._actx.currentTime + wait);
-  o.stop(parent._actx.currentTime + wait + 2);
-};
-
 function _set (data) {
   TAPX = (data.pageX - _offset.left) / _scale;
   TAPY = (data.pageY - _offset.top) / _scale;
@@ -565,7 +447,7 @@ function PitchToFrequency(octave, semitone) {
 	return 440 * Math.pow( 2, (octave-4)+(semitone-9)/12 );
 };
 
-window.addEventListener('load', _init, false);
+//window.addEventListener('load', _init, false);
 window.addEventListener('resize', _resize, false);
 
 n1 = Random(0, 9); 
